@@ -1,43 +1,56 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Text;
 using UnityEngine;
-using UnityEngine.UIElements;
+using TMPro;
+using System;
 
 public class Clustering : MonoBehaviour
 {
+    [SerializeField]private int k=3;
+    [SerializeField]private int maxIterations =10;
+    [SerializeField]private float delay =0.5f;
+    [SerializeField]private int maxPoints=64;
+    [SerializeField]private TMP_Text textK;
+    [SerializeField]private TMP_Text textIterations;
+    [SerializeField]private TMP_Text textDelay;
+    [SerializeField]private Camera cam;
     [SerializeField]private GameObject point;
     [SerializeField]private GameObject center;
     [SerializeField]private List<UnityEngine.Color> color;
+    [SerializeField]private float maxTimeToAddPoint = 0.3f;
+    private float lastPressTime = 0;
     private static List<Transform> points = new List<Transform>();
     private static List<Cluster> clusters = new List<Cluster>();
 
     static public bool inMoving = false;
-    void Start()
+    private void Start()
     {
-        
+        updateText();
     }
-
-    // Update is called once per frame
     void LateUpdate()
     {
 
-        if (Input.GetMouseButtonDown(0) && !inMoving)
-            addPoint();
+        if (Input.GetMouseButtonDown(0)) { 
+            lastPressTime = Time.time;
+            
+        }
+        if (Input.GetMouseButtonUp(0)) { 
+            if (!inMoving && (lastPressTime-Time.time <= maxTimeToAddPoint))
+                addPoint();
+            lastPressTime = Time.time;
+            
+        }
 
-        if (Input.GetKeyDown(KeyCode.Space))
-            StartCoroutine(KMean(10));
     }
 
     private void addPoint() {
-        points.Add(Instantiate(point, Camera.main.ScreenToWorldPoint(Input.mousePosition)+new Vector3(0,0,10), Quaternion.identity).transform);
-        //Debug.Log("point added count:" + points.Count);
 
+        if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject() || points.Count >= maxPoints)
+            return;
+        points.Add(Instantiate(point, cam.ScreenToWorldPoint(Input.mousePosition)+new Vector3(0,0,10), Quaternion.identity).transform);
     }
     public static void deletePoint(GameObject g) {
         points.Remove(g.transform);
-        //Debug.Log("point deleted count:"+ points.Count);
     }
 
     float distance(Vector3 t1, Vector3 t2) {
@@ -94,28 +107,92 @@ public class Clustering : MonoBehaviour
         }
     }
 
-    void destroyAllPoints() {
+    public void destroyAllPoints() {
+        if (isCalculating)
+            return;
         foreach (Transform t in points) { 
             Destroy (t.gameObject);
         }
         points.Clear();
     }
+
+
+    public void increaseK()
+    {
+        k++;
+        updateText();
+    }
+
+    public void decreaseK()
+    {
+        if (k > 2)
+            k--;
+        updateText();
+    }
+    
+    public void increaseIterations()
+    {
+        maxIterations++;
+        updateText();
+    }
+
+    public void decreaseIterations()
+    {
+        if (maxIterations > 2)
+            maxIterations--;
+        updateText();
+    }
+      
+    public void increaseDelay()
+    {
+        delay+=0.1f;
+        updateText();
+    }
+
+    public void decreaseDelay()
+    {
+        if (delay > 0.1f)
+            delay -= 0.1f;
+        updateText();
+    }
+
+    void updateText() {
+        textK.text = k + "";
+        textIterations.text = maxIterations + "";
+        textDelay.text =  delay.ToString("F1");
+    }
+
     bool isCalculating = false;
-    IEnumerator KMean(int k) {
-        if (!isCalculating) {
+
+
+    public void KMean() {
+        if (isCalculating)
+            return; // well be notification soon
+        if (points.Count <= k)
+            return; // well be notification soon
+        StartCoroutine(kMean(k));
+    }
+    IEnumerator kMean(int k) {
             isCalculating = true;
+
+            if (points.Count <= k) {
+
+                isCalculating = true;
+                yield return null;
+            }
+
+
             destroyTransform(clusters);
             clusters = new List<Cluster>();
-            //List<Cluster> newClusters = new List<Cluster>();
             List<Vector3> newCenters = new List<Vector3>();
             List<int> usedIndex = new List<int>();
             for (int i = 0; i < k; i++)
             { // chooseing K points to create the clusters from
                 
-                int x = Random.Range(0, points.Count-1);
+                int x = UnityEngine.Random.Range(0, points.Count-1);
                 
                 while (usedIndex.Contains(x))
-                    x = Random.Range(0, points.Count - 1);
+                    x = UnityEngine.Random.Range(0, points.Count - 1);
                 usedIndex.Add(x);
                 newCenters.Add(points[x].transform.position);
                 clusters.Add(new Cluster(Instantiate(center, newCenters[i], Quaternion.identity).transform, new List<Transform>(), color[(i % color.Count)]));
@@ -124,12 +201,11 @@ public class Clustering : MonoBehaviour
             changeColor(UnityEngine.Color.white);
             List<Vector3> centers = new List<Vector3>();
             int iteration = 0;
-            yield return new WaitForSecondsRealtime(0.5f);
-            while (!isEqual(centers, newCenters) && iteration <= 20)
+            
+            while (!isEqual(centers, newCenters) && iteration < maxIterations)
             {
                 iteration++;
-                //newClusters = new List<Cluster>();
-
+                yield return new WaitForSecondsRealtime(delay);
 
                 foreach (Transform g in points)
                 {
@@ -141,9 +217,7 @@ public class Clustering : MonoBehaviour
                     }
                     nearest.addPoint(g);
                 }
-                //clusters = newClusters;
-                
-                // calulate the new center
+
                 centers = newCenters;
                 newCenters = new List<Vector3>();
                 for (int i=0;i<clusters.Count; i++)
@@ -160,13 +234,12 @@ public class Clustering : MonoBehaviour
                     clusters[i].getPoints().Clear();
                     ;
                 }
-                Debug.Log("Clusters:" + clusters[0] +"\titeration:"+iteration+ "\tcenters:" + centers.Count  );
+                //Debug.Log("Clusters:" + clusters[0] +"\titeration:"+iteration+ "\tcenters:" + centers.Count  );
                 //newClusters = new List<Cluster>();
-                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             isCalculating = false;
-        }
+        
 
     }
 
@@ -187,7 +260,9 @@ class Cluster
 
     public Transform getCenter() { return center; }
     public void setCenter(Transform center) { this.center = center; }
-    public void setCenterPos(Vector3 v) { this.center.position = v; }
+    public void setCenterPos(Vector3 v) { try { this.center.position = v; } catch (Exception e) { } }
+             
+         
     public List<Transform> getPoints() { return points; }
     public void setPoints(List<Transform> points) { this.points = points; }
     public void addPoint(Transform point) { 
