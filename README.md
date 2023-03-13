@@ -2,7 +2,7 @@
  simple 2D visualization web application for K-mean ML algorithm that made from scratch using C# with unity.
  
  ## How to use
-  1. go to [webApp](https://hkunayn.github.io/Clustering/)
+  1. go to [webApp](https://hkhunayn.github.io/Clustering/)
   2. adding/edit/remove many points as you want
 
 
